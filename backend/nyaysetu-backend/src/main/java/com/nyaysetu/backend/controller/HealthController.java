@@ -27,9 +27,6 @@ public class HealthController {
                 "uptime", String.format("%dh %dm %ds", uptime.toHours(), uptime.toMinutesPart(), uptime.toSecondsPart()),
                     "version", version,
                 "java", javaVersion
-
-
-
         ));
     }
 }
