@@ -32,13 +32,21 @@ User question
 
 ---
 
-## Legal Corpus (Phase 1)
+## Legal Corpus (Phase 2)
 
-| Document | Source |
-|---|---|
-| Bharatiya Nyaya Sanhita (BNS) 2023 | bprd.nic.in |
-| Bharatiya Nagarik Suraksha Sanhita (BNSS) 2023 | indiacode.nic.in |
-| Bharatiya Sakshya Adhiniyam (BSA) 2023 | mha.gov.in |
+| Document | Pages | Chunks | Source |
+|---|---|---|---|
+| BNS 2023 | 28 | 63 | bprd.nic.in |
+| BNSS 2023 | 279 | 1248 | indiacode.nic.in |
+| BSA 2023 | 47 | 263 | mha.gov.in |
+| IPC 1860 | 119 | 733 | instapdf.in |
+| CrPC 1973 | 263 | 1325 | instapdf.in |
+| Constitution of India | 404 | 1407 | instapdf.in |
+| Indian Evidence Act 1872 | 74 | 258 | instapdf.in |
+| **Total** | **1214** | **5297** | |
+
+
+
 
 > **Note:** PDFs are not included in the repository. Download them manually
 > from official government sources (see Setup below).
@@ -96,13 +104,15 @@ python lawgpt/ingest.py
 ```
 
 Expected output:
-📂 Found 3 PDF(s) in legal_corpus/
-📄 BNSS_2023.pdf: 279 pages → 1248 chunks
-📄 BNS_2023.pdf: 28 pages → 63 chunks
-📄 BSA_2023.pdf: 47 pages → 263 chunks
-🔄 Embedding 1574 chunks with BAAI/bge-m3 ...
-✅ Indexed 1574 chunks from 3 files
-
+📂 Found 7 PDF(s) in legal_corpus/
+  📄 BNSS_2023.pdf: 279 pages → 1248 chunks
+  📄 BNS_2023.pdf: 28 pages → 63 chunks
+  📄 BSA_2023.pdf: 47 pages → 263 chunks
+  📄 CRPC_1973.pdf: 263 pages → 1325 chunks
+  📄 Constitution_India.pdf: 404 pages → 1407 chunks
+  📄 Evidence_Act_1872.pdf: 74 pages → 258 chunks
+  📄 IPC_1860.pdf: 119 pages → 733 chunks
+✅ Indexed 5297 chunks from 7 files
 > First run downloads the BAAI/bge-m3 model (~2.3GB). Subsequent runs use
 > the cached model and complete in under a minute.
 
@@ -133,7 +143,7 @@ curl http://localhost:8001/health
   "status": "ok",
   "index_loaded": true,
   "model": "groq",
-  "chunk_count": 1574
+  "chunk_count": 5297
 }
 ```
 
