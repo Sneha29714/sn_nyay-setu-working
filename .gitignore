@@ -96,8 +96,12 @@ mvnw.cmd
 coverage/
 .nyc_output/
 nlp-orchestrator/.env
+<<<<<<< feature/phase-1-lawgpt-rag
+backend/nyaysetu-backend/src/main/resources/application.properties
+=======
 
 
 __pycache__/
 *.pyc
 .pytest_cache/
+>>>>>>> main
