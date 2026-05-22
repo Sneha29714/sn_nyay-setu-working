@@ -103,6 +103,66 @@ JWT-based stateless authentication with Spring Security, role-based access contr
 
 <hr/>
 
+## Project Structure
+
+```text
+nyay-setu-working/
+│
+├── frontend/                        # React + Vite frontend application
+│   └── nyaysetu-frontend/           # Main frontend source code
+│       ├── src/
+│       │   ├── components/          # Reusable UI components
+│       │   ├── pages/               # Application pages/routes
+│       │   ├── services/            # API service handlers
+│       │   ├── hooks/               # Custom React hooks
+│       │   ├── store/               # Zustand/global state management
+│       │   ├── utils/               # Helper and utility functions
+│       │   └── assets/              # Images, icons, and static assets
+│       ├── public/                  # Public static files
+│       └── package.json             # Frontend dependencies and scripts
+│
+├── backend/                         # Spring Boot backend services
+│   └── nyaysetu-backend/
+│       ├── src/main/java/           # Main backend application source
+│       ├── src/main/resources/      # Configuration files and resources
+│       ├── src/test/                # Backend test cases
+│       └── pom.xml                  # Maven configuration
+│
+├── nlp-orchestrator/                # FastAPI-based NLP orchestration service
+│   ├── main.py                      # Main FastAPI application entry point
+│   ├── services/                    # NLP and AI processing services
+│   ├── routes/                      # API route handlers
+│   ├── models/                      # AI/NLP models and schemas
+│   └── requirements.txt             # Python dependencies
+│
+├── docs/                            # Project documentation
+│   ├── architecture/                # Architecture and system design docs
+│   ├── setup.md                     # Setup and installation guide
+│   └── additional-guides/           # Supporting documentation
+│
+├── assets/                          # README banners, screenshots, and assets
+│
+├── .github/                         # GitHub workflows and community files
+│   ├── workflows/                   # CI/CD GitHub Actions workflows
+│   └── ISSUE_TEMPLATE/              # GitHub issue templates
+│
+├── CONTRIBUTING.md                  # Contribution guidelines
+├── README.md                        # Main project documentation
+├── LICENSE                          # Open-source license
+└── SYSTEM_DOCUMENTATION.md          # API and system documentation
+```
+
+### Directory Overview
+
+| Directory | Purpose |
+|---|---|
+| `frontend/` | Contains the React frontend application and UI components |
+| `backend/` | Handles APIs, authentication, database access, and business logic |
+| `nlp-orchestrator/` | Manages AI-powered legal assistance and NLP workflows |
+| `docs/` | Contains setup guides, architecture diagrams, and technical documentation |
+| `assets/` | Stores README images, banners, and other static assets |
+| `.github/` | GitHub workflows, templates, and repository automation |
+
 ## Quick Start
 
 For complete setup instructions, environment configuration, and Docker deployment details, refer to the **[Detailed Setup Guide](./docs/setup.md)**.
@@ -151,6 +211,66 @@ Browse [open issues](https://github.com/viru0909-dev/nyay-setu-working/issues) a
 
 <hr/>
 
+## Troubleshooting
+
+### Common Setup Issues
+
+#### 1. npm install fails
+- Ensure Node.js version is `>= 20`
+- Delete `node_modules` and reinstall dependencies:
+
+```bash
+rm -rf node_modules
+npm install
+```
+
+---
+
+#### 2. PostgreSQL connection issues
+- Verify PostgreSQL service is running
+- Check database credentials in `.env`
+- Ensure database and user are created properly
+
+---
+
+#### 3. Java version mismatch
+Verify Java version:
+
+```bash
+java -version
+```
+
+Ensure Java 17 is installed and configured correctly.
+
+---
+
+#### 4. Missing environment variables
+- Copy `.env.example` to `.env`
+- Fill all required variables before starting services
+
+---
+
+#### 5. Backend server not starting
+- Ensure PostgreSQL is running
+- Verify Maven installation:
+
+```bash
+mvn -version
+```
+
+- Check all dependencies are installed properly
+
+---
+
+#### 6. Port already in use
+Stop conflicting processes or use different ports.
+
+Example:
+
+```bash
+npx kill-port 3000
+```
+
 ## Contributors
 
 <br/>
@@ -167,7 +287,9 @@ This chart updates automatically as new contributors merge pull requests. Want t
 
 ## License
 
-License to be added. All rights reserved until a license is formally declared.
+This project is licensed under the MIT License.
+
+See the [LICENSE](./LICENSE) file for more details.
 
 <hr/>
 
