@@ -30,6 +30,7 @@ from decomposer import decompose_query
 from router import route_questions
 from research import run_parallel_research
 from synthesizer import synthesize_answers
+from validators.citation_validator import validate_citations_from_text
 from avatar_speech import get_interim_messages, convert_to_hinglish, detect_domain
 from services.kanoon_search import build_kanoon_context
 from routers.forensics import router as forensics_router
@@ -155,13 +156,22 @@ async def legal_reasoning_pipeline(query: str, language: str):
         logger.info("[Layer 4] Synthesizing...")
         synthesized_md = await synthesize_answers(query, results)
 
+        try:
+            validation_results = validate_citations_from_text(synthesized_md)
+            if validation_results:
+                logger.info("[Layer 4] Citation validation results: %s", validation_results)
+        except Exception as e:
+            logger.warning("[Layer 4] Citation validation failed (non-blocking): %s", e)
+            validation_results = []
+
         # ── Layer 5b: Hinglish Conversion ────────────────────────
         logger.info("[Layer 5] Converting to Hinglish...")
         hinglish_dialogue = await convert_to_hinglish(synthesized_md)
 
         yield sse_event("final_answer", {
             "markdown": synthesized_md,
-            "hinglish": hinglish_dialogue
+            "hinglish": hinglish_dialogue,
+            "citation_validation": validation_results
         })
 
         yield sse_event("done", {"message": "Research complete"})
@@ -226,14 +236,12 @@ async def analyze_stream(body: LegalQuery, request: Request):
 
     async def event_generator():
         pipeline = legal_reasoning_pipeline(body.query, body.language)
-        try:
-            async for event in pipeline:
-                if await request.is_disconnected():
-                    logger.info("[Stream] Client disconnected")
-                    break
-                yield {"data": event}
-        finally:
-            await pipeline.aclose()
+
+        async for event in pipeline:
+            if await request.is_disconnected():
+                logger.info("[Stream] Client disconnected")
+                break
+            yield {"data": event}
 
     return EventSourceResponse(event_generator())
 
@@ -260,6 +268,15 @@ async def analyze_sync(body: LegalQuery):
         kanoon_context = ""
     results = await run_parallel_research(routed, kanoon_context=kanoon_context)
     synthesized = await synthesize_answers(body.query, results)
+
+    try:
+        validation_results = validate_citations_from_text(synthesized)
+        if validation_results:
+            logger.info("[Sync] Citation validation results: %s", validation_results)
+    except Exception as e:
+        logger.warning("[Sync] Citation validation failed (non-blocking): %s", e)
+        validation_results = []
+
     hinglish = await convert_to_hinglish(synthesized)
 
     return JSONResponse({
@@ -268,7 +285,8 @@ async def analyze_sync(body: LegalQuery):
         "research": results,
         "final_answer": {
             "markdown": synthesized,
-            "hinglish": hinglish
+            "hinglish": hinglish,
+            "citation_validation": validation_results
         }
     })
 
@@ -421,78 +439,40 @@ async def deep_research_pipeline(query: str, language: str):
 
         # Call the AI model and stream reasoning
         ai_answer = None
-        cached = False
+
         if model_choice == "gemini" and gemini_client:
-            cache_key = generate_cache_key(
-                "gemini",
-                grounded_prompt,
-                GEMINI_MODEL,
-                user_query=query
-            )
+            try:
+                loop = asyncio.get_event_loop()
 
-            cached_response = get_cached_response(cache_key)
-
-            if cached_response:
-                logger.info("[Deep Research] Gemini cache hit")
-                ai_answer = cached_response
-                cached = True
-
-            else:
-                try:
-                    loop = asyncio.get_event_loop()
-
-                    response = await loop.run_in_executor(
-                        None,
-                        lambda: gemini_client.models.generate_content(
-                            model=GEMINI_MODEL,
-                            contents=grounded_prompt
-                        )
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: gemini_client.models.generate_content(
+                        model=GEMINI_MODEL,
+                        contents=grounded_prompt
                     )
+                )
 
-                    ai_answer = response.text.strip()
+                ai_answer = response.text.strip()
 
-                    set_cached_response(cache_key, ai_answer)
-
-                except Exception as e:
-                    logger.error(f"Gemini failed, falling back to Groq: {e}")
-
-                    model_choice = "groq"
-
+            except Exception as e:
+                logger.error(f"Gemini failed, falling back to Groq: {e}")
+                model_choice = "groq"
 
         if model_choice == "groq" or (
             model_choice == "gemini" and not gemini_client
         ):
 
-            cache_key = generate_cache_key(
-                "groq",
-                grounded_prompt,
-                GROQ_MODEL_FAST,
-                user_query=query
+            response = await groq_client.chat.completions.create(
+                model=GROQ_MODEL_FAST,
+                messages=[
+                    {"role": "system", "content": grounded_prompt},
+                    {"role": "user", "content": query}
+                ],
+                temperature=0.2,
+                max_tokens=2048
             )
 
-            cached_response = get_cached_response(cache_key)
-
-            if cached_response and not cached:
-                logger.info("[Deep Research] Groq cache hit")
-
-                ai_answer = cached_response
-                cached = True
-
-            else:
-                response = await groq_client.chat.completions.create(
-                    model=GROQ_MODEL_FAST,
-                    messages=[
-                        {"role": "system", "content": grounded_prompt},
-                        {"role": "user", "content": query}
-                    ],
-                    temperature=0.2,
-                    max_tokens=2048
-                )
-
-                ai_answer = response.choices[0].message.content.strip()
-
-                if not cached:
-                    set_cached_response(cache_key, ai_answer)
+            ai_answer = response.choices[0].message.content.strip()
 
         # Stream reasoning text in chunks for live display
         if ai_answer:
@@ -511,12 +491,17 @@ async def deep_research_pipeline(query: str, language: str):
 
         # ── Stage 5: VERDICT ──────────────────────────────────────
         logger.info("[Deep Research] Stage 5: Verdict...")
-        
+
         yield sse_event("stage", {
             "stage": "verdict",
             "status": "active",
             "message": "Preparing final legal conclusion..."
         })
+
+        # Validate citations in AI response
+        citation_validation = validate_citations_from_text(ai_answer) if ai_answer else []
+        if citation_validation:
+            logger.info("[Deep Research] Citation validation: %s", citation_validation)
 
         # Convert to Hinglish for avatar speech
         hinglish_verdict = await convert_to_hinglish(ai_answer or "Analysis could not be completed.")
@@ -537,6 +522,7 @@ async def deep_research_pipeline(query: str, language: str):
             "answer": ai_answer or "Unable to generate analysis.",
             "hinglish": hinglish_verdict,
             "citations": citations,
+            "citation_validation": citation_validation,
             "model_used": model_choice,
             "domain": domain_label
         })
@@ -576,14 +562,12 @@ async def deep_research(body: LegalQuery, request: Request):
 
     async def event_generator():
         pipeline = deep_research_pipeline(body.query, body.language)
-        try:
-            async for event in pipeline:
-                if await request.is_disconnected():
-                    logger.info("[Deep Research] Client disconnected")
-                    break
-                yield {"data": event}
-        finally:
-            await pipeline.aclose()
+
+        async for event in pipeline:
+            if await request.is_disconnected():
+                logger.info("[Deep Research] Client disconnected")
+                break
+            yield {"data": event}
 
     return EventSourceResponse(event_generator())
 
