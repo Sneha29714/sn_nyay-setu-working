@@ -38,7 +38,7 @@ class NotificationService {
 
             this.isConnecting = true;
 
-            // Merged environment log routing rules without conflicts
+            // Merged environment log routing rules - CONFLICT 1 RESOLVED
             if (!isProduction) {
                 if (import.meta.env.DEV) {
                     console.log('Connecting to WebSocket:', wsUrl);
@@ -47,15 +47,17 @@ class NotificationService {
 
             this.ws = new WebSocket(wsUrl);
 
-            // In-band Authentication frame payload dispatch
+            // In-band Authentication frame payload dispatch - CONFLICT 2 RESOLVED
             this.ws.onopen = () => {
                 if (!isProduction) {
                     if (import.meta.env.DEV) {
                         console.log('✅ WebSocket connected');
                     }
                 }
+                this.reconnectAttempts = 0;
+                this.isConnecting = false;
                 
-                // Securely transmit token in the body frame
+                // Securely transmit token in the body frame immediately on open
                 this.ws.send(JSON.stringify({
                     type: 'AUTH',
                     token: token
