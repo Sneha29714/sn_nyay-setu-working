@@ -36,13 +36,33 @@ async def test_retry_then_success(monkeypatch):
     mock_attempt = AsyncMock(side_effect=[transient, success])
 
     with patch("research.build_provider_queue", return_value=["groq"]), \
-     patch("research._attempt_provider", mock_attempt), \
-     patch("research.RETRY_DELAY_SECONDS", 0), \
-     patch("research.is_retryable_exception", return_value=True), \
-     patch("asyncio.sleep", AsyncMock()):
+         patch("research._attempt_provider", mock_attempt), \
+         patch("research.RETRY_DELAY_SECONDS", 0), \
+         patch("research.RETRY_MAX_ATTEMPTS", 1), \
+         patch("research.is_retryable_exception", return_value=True), \
+         patch("asyncio.sleep", AsyncMock()):
         res = await execute_with_fallback("Q2", "", primary_provider="groq")
         assert res["source"] == "groq"
         assert mock_attempt.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_circuit_breaker_provider_skipped():
+    # Ensure that when the primary provider's circuit breaker is open, it's skipped
+    ok = {"question":"Q6","answer":"ok","source":"groq","error":None,"is_fallback":False}
+
+    async def attempt_side_effect(provider, question, kanoon_context=None):
+        # should only be called for groq since gemini breaker is open
+        assert provider == "groq"
+        return ok
+
+    with patch("research.build_provider_queue", return_value=["gemini","groq"]), \
+         patch("research.gemini_client", True), \
+         patch("research.gemini_breaker.is_available", return_value=False), \
+         patch("research._attempt_provider", AsyncMock(side_effect=attempt_side_effect)):
+        res = await execute_with_fallback("Q6", "", primary_provider="gemini")
+        assert res["source"] == "groq"
+        assert res["answer"] == "ok"
 
 
 @pytest.mark.asyncio

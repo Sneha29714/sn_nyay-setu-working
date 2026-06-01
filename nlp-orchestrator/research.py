@@ -101,7 +101,8 @@ async def _attempt_provider(provider: str, question: str, kanoon_context: str | 
             logger.warning("[CircuitBreaker/Gemini] OPEN - skipping")
             return _fallback_response(question, "gemini")
         try:
-            res = await _call_gemini_with_retry(question, kanoon_context)
+            # Use single-attempt call here; coordinator owns retries
+            res = await _call_gemini_once(question, kanoon_context)
             gemini_breaker.call_succeeded()
             return res
         except Exception as exc:
@@ -114,7 +115,8 @@ async def _attempt_provider(provider: str, question: str, kanoon_context: str | 
             logger.warning("[CircuitBreaker/Groq] OPEN - skipping")
             return _fallback_response(question, "groq")
         try:
-            res = await _call_groq_with_retry(question, kanoon_context)
+            # Use single-attempt call here; coordinator owns retries
+            res = await _call_groq_once(question, kanoon_context)
             groq_breaker.call_succeeded()
             return res
         except Exception as exc:
@@ -135,9 +137,10 @@ async def execute_with_fallback(question: str, kanoon_context: str | None = None
         return _fallback_response(question, "all_providers_failed")
 
     last_error = None
+    # Interpret RETRY_MAX_ATTEMPTS as number of retries (not total attempts).
+    # Total attempts per provider = RETRY_MAX_ATTEMPTS + 1 (initial attempt + retries)
     for provider in providers:
-        attempt = 1
-        while attempt <= RETRY_MAX_ATTEMPTS:
+        for attempt in range(RETRY_MAX_ATTEMPTS + 1):
             try:
                 result = await _attempt_provider(provider, question, kanoon_context)
                 # If provider returns a fallback-shaped response, treat as failure and try next provider
@@ -148,13 +151,14 @@ async def execute_with_fallback(question: str, kanoon_context: str | None = None
             except Exception as exc:
                 last_error = exc
                 # Decide whether to retry this exception
-                if not RETRY_ENABLED or not is_retryable_exception(exc) or attempt >= RETRY_MAX_ATTEMPTS:
+                is_last_attempt = (attempt == RETRY_MAX_ATTEMPTS)
+                if (not RETRY_ENABLED) or (not is_retryable_exception(exc)) or is_last_attempt:
                     logger.error(f"[Research] Provider {provider} terminal error: {exc}")
                     break
-                wait = RETRY_DELAY_SECONDS * attempt
-                logger.warning(f"[Research] Transient error from {provider}, retry {attempt} in {wait}s: {exc}")
+                # backoff increases with each retry (attempt starts at 0)
+                wait = RETRY_DELAY_SECONDS * (attempt + 1)
+                logger.warning(f"[Research] Transient error from {provider}, retry {attempt+1} in {wait}s: {exc}")
                 await asyncio.sleep(wait)
-                attempt += 1
 
         logger.warning(f"[Research] Provider {provider} exhausted, trying next provider if available")
 
@@ -162,9 +166,8 @@ async def execute_with_fallback(question: str, kanoon_context: str | None = None
     return _fallback_response(question, "all_providers_failed")
 
 
-@retry_transient
-async def _call_groq_with_retry(question: str, kanoon_context: str | None = None) -> dict:
-    """Helper to call Groq LPU with retry logic."""
+async def _call_groq_once(question: str, kanoon_context: str | None = None) -> dict:
+    """Single attempt to call Groq LPU (no retry decorator)."""
     user_prompt = _build_user_prompt(question, kanoon_context)
     response = await groq_client.chat.completions.create(
         model=GROQ_MODEL_FAST,
@@ -183,9 +186,8 @@ async def _call_groq_with_retry(question: str, kanoon_context: str | None = None
     }
 
 
-@retry_transient
-async def _call_gemini_with_retry(question: str, kanoon_context: str | None = None) -> dict:
-    """Helper to call Gemini with retry logic."""
+async def _call_gemini_once(question: str, kanoon_context: str | None = None) -> dict:
+    """Single attempt to call Gemini (no retry decorator)."""
     user_prompt = _build_user_prompt(question, kanoon_context)
     full_prompt = (
         f"{LEGAL_SYSTEM_PROMPT}\n\n"
@@ -210,6 +212,12 @@ async def _call_gemini_with_retry(question: str, kanoon_context: str | None = No
         "source": "gemini",
         "error": None
     }
+
+
+# Keep convenience decorated versions for other call sites that expect retry behavior.
+# These wrap the single-attempt functions with the tenacity retry policy.
+_call_groq_with_retry = retry_transient(_call_groq_once)
+_call_gemini_with_retry = retry_transient(_call_gemini_once)
 
 
 async def call_groq_async(question: str, kanoon_context: str | None = None) -> dict:
