@@ -155,6 +155,7 @@ export default function AIAssistantModal({ isOpen, onClose }) {
                                 whileTap={{ scale: 0.92 }}
                                 transition={{ type: 'spring', stiffness: 350 }}
                                 onClick={onClose}
+                                aria-label="Close"
                                 style={{
                                     background: 'var(--bg-hover)',
                                     border: '1px solid var(--border-medium)',
